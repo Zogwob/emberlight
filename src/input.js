@@ -1,6 +1,8 @@
 // Keyboard and mouse, read fresh every frame. Movement is WASD or arrows;
-// the mouse aims; hold the left button (or Space) to shoot. Enter/Space
-// confirms on menus, P or Escape pauses, 1/2/3 pick an upgrade card.
+// the mouse aims; the lantern fires on its own in v2 (hold the left button
+// or Space still counts as firing, harmlessly). Enter/Space confirms on
+// menus, P or Escape pauses, I opens the status panel, R re-rolls the card
+// offer, 1-4 pick an upgrade card, 5-8 buy a shop item.
 
 export const ACTION_CONFIRM = 1;
 export const ACTION_PAUSE = 2;
@@ -23,16 +25,32 @@ export function createInput(canvas) {
   let mouseY = 0;
   let mouseDown = false;
   let upgradePick = 0;
+  let shopPick = 0;
   let clicked = false;
+  let confirmKey = false;
+  let ult = false;
+  let stats = false;
+  let refresh = false;
 
   function onKeyDown(event) {
     if (event.repeat) return;
     held.add(event.code);
-    if (event.code === 'Enter' || event.code === 'Space') actions |= ACTION_CONFIRM;
+    if (event.code === 'Enter' || event.code === 'Space') {
+      actions |= ACTION_CONFIRM;
+      confirmKey = true;
+    }
+    if (event.code === 'KeyQ') ult = true;
+    if (event.code === 'KeyI') stats = true;
+    if (event.code === 'KeyR') refresh = true;
     if (event.code === 'KeyP' || event.code === 'Escape') actions |= ACTION_PAUSE;
     if (event.code === 'Digit1') upgradePick = 1;
     if (event.code === 'Digit2') upgradePick = 2;
     if (event.code === 'Digit3') upgradePick = 3;
+    if (event.code === 'Digit4') upgradePick = 4;
+    if (event.code === 'Digit5') shopPick = 1;
+    if (event.code === 'Digit6') shopPick = 2;
+    if (event.code === 'Digit7') shopPick = 3;
+    if (event.code === 'Digit8') shopPick = 4;
     if (event.code === 'Space' || event.code.startsWith('Arrow')) event.preventDefault();
   }
 
@@ -100,10 +118,40 @@ export function createInput(canvas) {
       actions = 0;
       return out;
     },
-    /** 1, 2 or 3 when an upgrade key was pressed since the last read, else 0. */
+    /** 1, 2, 3 or 4 when an upgrade key was pressed since the last read, else 0. */
     takeUpgradePick() {
       const out = upgradePick;
       upgradePick = 0;
+      return out;
+    },
+    /** 1-4 when a shop key (5-8) was pressed since the last read, else 0. */
+    takeShopPick() {
+      const out = shopPick;
+      shopPick = 0;
+      return out;
+    },
+    /** True when Enter or Space (keyboard only, never a click) was pressed. */
+    takeConfirmKey() {
+      const out = confirmKey;
+      confirmKey = false;
+      return out;
+    },
+    /** True when Q (fire the ultimates) was pressed since the last read. */
+    takeUlt() {
+      const out = ult;
+      ult = false;
+      return out;
+    },
+    /** True when I (open the status panel) was pressed since the last read. */
+    takeStats() {
+      const out = stats;
+      stats = false;
+      return out;
+    },
+    /** True when R (re-roll the card offer) was pressed since the last read. */
+    takeRefresh() {
+      const out = refresh;
+      refresh = false;
       return out;
     },
     /** True once per mouse press since the last read (for card clicks). */
