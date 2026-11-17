@@ -6,11 +6,13 @@
 // and endless boss waves (30, 35, ...) bring two bosses at once.
 
 export const BOSS_DEFS = [
-  { wave: 5, id: 'gloomfiend', name: 'Gloomfiend', kind: 'skitter', hp: 90, radius: 32, color: '#4a2a6e', mechanic: 'charge', icon: 'charge' },
-  { wave: 10, id: 'spitmother', name: 'Spitmother', kind: 'spitter', hp: 150, radius: 36, color: '#5e2a7a', mechanic: 'spread', icon: 'spread' },
-  { wave: 15, id: 'twinmaw', name: 'Twin Maw', kind: 'spitter', hp: 210, radius: 38, color: '#6e3a2a', mechanic: 'twin', icon: 'twin' },
-  { wave: 20, id: 'stormcaller', name: 'Stormcaller', kind: 'spitter', hp: 280, radius: 38, color: '#2a6e4a', mechanic: 'summon', icon: 'summon' },
-  { wave: 25, id: 'longnight', name: 'The Long Night', kind: 'brute', hp: 360, radius: 48, color: '#1a1a3e', mechanic: 'final', icon: 'night' },
+  // Damage scales with the wave: the first boss still taps for 1, later
+  // bosses hit for 2, and the Long Night's brute bulk hits for 3.
+  { wave: 5, id: 'gloomfiend', name: 'Gloomfiend', kind: 'skitter', hp: 150, radius: 32, color: '#4a2a6e', mechanic: 'charge', icon: 'charge', damage: 1 },
+  { wave: 10, id: 'spitmother', name: 'Spitmother', kind: 'spitter', hp: 350, radius: 36, color: '#5e2a7a', mechanic: 'spread', icon: 'spread', damage: 2 },
+  { wave: 15, id: 'twinmaw', name: 'Twin Maw', kind: 'spitter', hp: 600, radius: 38, color: '#6e3a2a', mechanic: 'twin', icon: 'twin', damage: 2 },
+  { wave: 20, id: 'stormcaller', name: 'Stormcaller', kind: 'spitter', hp: 1200, radius: 38, color: '#2a6e4a', mechanic: 'summon', icon: 'summon', damage: 2 },
+  { wave: 25, id: 'longnight', name: 'The Long Night', kind: 'brute', hp: 2700, radius: 48, color: '#1a1a3e', mechanic: 'final', icon: 'night', damage: 3 },
 ];
 
 /** The boss for a boss wave (5, 10, 15, ...); the cycle repeats past 25, tougher each time. */
@@ -45,7 +47,9 @@ export function makeBoss(def, at, baseSpeed) {
     maxHp: def.hp,
     radius: def.radius,
     speed: baseSpeed * 0.9,
-    damage: def.kind === 'brute' ? 2 : 1,
+    // A boss hits for its own damage (see BOSS_DEFS): 1 on wave 5, 2 on
+    // waves 10-20, 3 for the Long Night.
+    damage: def.damage ?? (def.kind === 'brute' ? 3 : 2),
     score: 150 + def.wave * 50,
     wobbleT: 0,
     shootT: 2,

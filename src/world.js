@@ -350,7 +350,7 @@ export function createWorld(random) {
       e.dashT = 0.5;
     }
     if ((m === 'blink' || m === 'blinkspread' || m === 'final') && e.bossT <= 0) {
-      e.bossT = 3.5;
+      e.bossT = 3;
       // Blink away and reappear elsewhere, away from the keeper.
       const a = random.range(0, TAU);
       const r = random.range(250, 400);
@@ -360,17 +360,17 @@ export function createWorld(random) {
     }
     // Fan of orbs (spread / twin / blinkspread) and summons share the second.
     if ((m === 'spread' || m === 'twin' || m === 'blinkspread') && e.bossT2 <= 0 && dist < 520) {
-      e.bossT2 = 2.5;
+      e.bossT2 = 2;
       fan(3, 0.25);
     }
     if ((m === 'summon' || m === 'final') && e.bossT2 <= 0 && state.enemies.length < 25) {
-      e.bossT2 = 6;
+      e.bossT2 = 5;
       spawnEnemy('skitter');
       spawnEnemy('skitter');
     }
     // Ring of orbs (radial / slam / final) on the third timer.
     if ((m === 'radial' || m === 'slam' || m === 'final') && e.bossT3 <= 0) {
-      e.bossT3 = 3;
+      e.bossT3 = 2.5;
       ring(8);
     }
   }
