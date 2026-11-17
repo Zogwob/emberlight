@@ -54,6 +54,11 @@ export function createWorld(random) {
     kills: 0,
     time: 0,
     shake: 0,
+    // Settings, not run state: the screen-shake switch and the particle
+    // density. reset() leaves them alone (like the chosen keeper), so a new
+    // run keeps the player's settings.
+    shakeEnabled: true,
+    particleScale: 1,
     banner: '',
     bannerTime: 0,
     upgradesTaken: {},
@@ -165,8 +170,16 @@ export function createWorld(random) {
     return embers;
   }
 
+  /** Screen shake, gated by the setting — Off means the screen never shakes. */
+  function addShake(amount, cap) {
+    if (state.shakeEnabled === false) return;
+    state.shake = Math.min(cap, state.shake + amount);
+  }
+
   function burst(x, y, color, count, speed) {
-    for (let i = 0; i < count; i += 1) {
+    // Reduced effects: fewer particles, a calmer screen.
+    const n = Math.max(1, Math.round(count * (state.particleScale ?? 1)));
+    for (let i = 0; i < n; i += 1) {
       const a = random.range(0, TAU);
       const v = random.range(speed * 0.3, speed);
       state.particles.push({
@@ -376,7 +389,7 @@ export function createWorld(random) {
     state.enemies.splice(index, 1);
     state.kills += 1;
     state.score += e.score;
-    state.shake = Math.min(10, state.shake + (e.kind === 'brute' ? 4 : 2));
+    addShake(e.kind === 'brute' ? 4 : 2, 10);
     burst(e.x, e.y, '#8a7bd8', e.kind === 'brute' ? 22 : 10, 170);
     burst(e.x, e.y, '#ffb347', 6, 120);
     floater(e.x, e.y - 10, `+${e.score}`, '#ffd98a');
@@ -438,7 +451,7 @@ export function createWorld(random) {
     p.regenAcc = 0;
     p.invulnerable = PLAYER.invulnerable;
     // Getting hurt shakes the screen, but never as hard as an ultimate.
-    state.shake = Math.min(14, state.shake + 5);
+    addShake(5, 14);
     burst(p.x, p.y, '#ff5d73', 14, 200);
     events.push('hurt');
     if (p.hp <= 0) {
@@ -701,7 +714,7 @@ export function createWorld(random) {
         if (b.kind === 'meteor') {
           burst(b.x, b.y, '#ff8a3d', 18, 220);
           burst(b.x, b.y, tint.wisp, 8, 140);
-          state.shake = Math.min(10, state.shake + 3);
+          addShake(3, 10);
         }
         state.bullets.splice(i, 1);
       }
@@ -1126,7 +1139,7 @@ export function createWorld(random) {
         state.lantern = 0;
         // The ultimate is the strongest shake in the game — nothing else
         // shakes this hard, so the player feels it above every other hit.
-        state.shake = Math.min(14, state.shake + 12);
+        addShake(12, 14);
         floater(p.x, p.y - 24, 'ULTIMATE!', '#ffd700');
         events.push('ult');
       }

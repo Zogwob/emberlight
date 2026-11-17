@@ -10,6 +10,7 @@ import { REFRESH_MAX, REFRESH_PRICES } from './economy.js';
 import { describeUpgrade } from './cards.js';
 import { ITEM_DEFS, itemView } from './items.js';
 import { playerStats } from './stats.js';
+import { DEFAULT_SETTINGS } from './settings.js';
 
 export const SCREEN_TITLE = 'title';
 export const SCREEN_PLAY = 'play';
@@ -18,6 +19,8 @@ export const SCREEN_PAUSED = 'paused';
 export const SCREEN_STATS = 'stats';
 export const SCREEN_OVER = 'over';
 export const SCREEN_WON = 'won';
+export const SCREEN_MENU = 'menu';
+export const SCREEN_SETTINGS = 'settings';
 
 /** Card category colours, by the card's kind. */
 const CATEGORY_COLORS = {
@@ -89,6 +92,86 @@ export function statsToggleRect() {
  */
 export function keeperIconRect() {
   return { x: 256, y: 666, w: 96, h: 40 };
+}
+
+/**
+ * The "Menu" button: back to the title from pause, game over or dawn.
+ * One shared geometry, so the painter and the click handling agree: on the
+ * pause menu it is the third button (see pauseLayout); on the end screens
+ * it sits under the prompt, inside the panel either way.
+ */
+export function menuButtonRect(screen) {
+  if (screen === SCREEN_PAUSED) return pauseLayout().menu;
+  return { x: FIELD.width / 2 - 100, y: 500, w: 200, h: 40 };
+}
+
+/**
+ * The pause menu's geometry, shared by the painter and the click handling:
+ * the panel and its three buttons — Resume, Settings, Menu — stacked under
+ * the title, each labelled with its key.
+ */
+export function pauseLayout() {
+  return {
+    panel: { x: FIELD.width / 2 - 250, y: 240, w: 500, h: 300 },
+    resume: { x: FIELD.width / 2 - 110, y: 330, w: 220, h: 48 },
+    settings: { x: FIELD.width / 2 - 110, y: 390, w: 220, h: 48 },
+    menu: { x: FIELD.width / 2 - 110, y: 450, w: 220, h: 48 },
+  };
+}
+
+/**
+ * The main menu's geometry, shared by the painter and the click handling:
+ * two centred buttons under the title — Start, then Settings.
+ */
+export function menuLayout() {
+  return {
+    start: { x: FIELD.width / 2 - 110, y: 290, w: 220, h: 56 },
+    settings: { x: FIELD.width / 2 - 110, y: 362, w: 220, h: 56 },
+  };
+}
+
+/**
+ * The Back button (top-left corner): back to the main menu from the keeper
+ * select and from the settings screen. One rect for both screens.
+ */
+export function backButtonRect() {
+  return { x: 20, y: 20, w: 140, h: 40 };
+}
+
+/**
+ * The settings screen's geometry, shared by the painter and the click
+ * handling: the panel, four rows (Music, SFX, Shake, Effects), each with
+ * its option buttons, and the Back button. The current value of a row is
+ * read from the settings object, not from this layout.
+ */
+export function settingsLayout() {
+  const panel = { x: 340, y: 110, w: 600, h: 500 };
+  const row = (id, label, y, options, w) => {
+    const total = options.length * w + (options.length - 1) * 8;
+    const x0 = panel.x + panel.w - 40 - total;
+    return {
+      id, label, y,
+      options: options.map((value, i) => ({ value, rect: { x: x0 + i * (w + 8), y, w, h: 48 } })),
+    };
+  };
+  return {
+    panel,
+    back: backButtonRect(),
+    rows: [
+      row('music', 'Music (BGM)', 210, ['off', 'low', 'med', 'high'], 52),
+      row('sfx', 'Sound effects', 290, ['off', 'low', 'med', 'high'], 52),
+      row('shake', 'Screen shake', 370, ['on', 'off'], 52),
+      row('effects', 'Effects', 450, ['full', 'reduced'], 76),
+    ],
+  };
+}
+
+/** The current value of one settings row, as the row's option values read. */
+export function settingsValue(settings, id) {
+  if (id === 'music') return settings.music;
+  if (id === 'sfx') return settings.sfx;
+  if (id === 'shake') return settings.shake ? 'on' : 'off';
+  return settings.effects;
 }
 
 /**
@@ -1078,10 +1161,13 @@ export function createRenderer(canvas) {
     const nameW = ctx.measureText(char.name).width;
     ctx.fillStyle = '#ffd700';
     ctx.fillText(`Lv ${p.level}`, bar.x + 74 + nameW + 8, bar.y + 22);
-    // The level gauge: cumulative XP toward the next level.
+    // The level gauge: cumulative XP toward the next level. The numbers sit
+    // centred INSIDE the gauge (white on a dark outline), so the widest
+    // count the game can show — "1425/1425" — still ends well left of the
+    // divider at 452 and the section stays symmetric.
     const gx = bar.x + 74;
     const gy = bar.y + 30;
-    const gw = 96;
+    const gw = 120;
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.fillRect(gx, gy, gw, 9);
     ctx.fillStyle = '#ffd700';
@@ -1089,9 +1175,14 @@ export function createRenderer(canvas) {
     ctx.strokeStyle = PALETTE.panelEdge;
     ctx.lineWidth = 1;
     ctx.strokeRect(gx, gy, gw, 9);
-    ctx.fillStyle = PALETTE.muted;
-    ctx.font = `10px ${FONT}`;
-    ctx.fillText(`${p.xp}/${p.xpNeed}`, gx + gw + 6, gy + 9);
+    ctx.font = `bold 10px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    ctx.lineWidth = 3;
+    ctx.strokeText(`${p.xp}/${p.xpNeed}`, gx + gw / 2, gy + 9);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(`${p.xp}/${p.xpNeed}`, gx + gw / 2, gy + 9);
+    ctx.textAlign = 'left';
     // One slot per item type: owned ones lit with their icon and level,
     // the rest dimmed so the whole collection is visible at a glance.
     ctx.strokeStyle = PALETTE.panelEdge;
@@ -1147,8 +1238,11 @@ export function createRenderer(canvas) {
     ctx.fillStyle = names.length > 0 ? PALETTE.text : PALETTE.muted;
     ctx.textAlign = 'left';
     ctx.fillText(ultLine, ux + 28, bar.y + 20);
+    // The lantern gauge: the numbers sit centred INSIDE it (white on a dark
+    // outline), like the level gauge on the left — "Lantern 100%" is the
+    // widest text and it still ends 8px short of the bar's right edge.
     const uy = bar.y + 30;
-    const uw = 108;
+    const uw = 166;
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.fillRect(ux + 28, uy, uw, 9);
     ctx.fillStyle = ready ? '#ffd700' : '#ff9a3d';
@@ -1156,9 +1250,14 @@ export function createRenderer(canvas) {
     ctx.strokeStyle = PALETTE.panelEdge;
     ctx.lineWidth = 1;
     ctx.strokeRect(ux + 28, uy, uw, 9);
-    ctx.fillStyle = ready ? '#ffd700' : PALETTE.muted;
     ctx.font = `bold 11px ${FONT}`;
-    ctx.fillText(ready ? 'Q READY' : `Lantern ${Math.floor(state.lantern)}%`, ux + 28 + uw + 8, uy + 9);
+    ctx.textAlign = 'center';
+    ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+    ctx.lineWidth = 3;
+    ctx.strokeText(ready ? 'Q READY' : `Lantern ${Math.floor(state.lantern)}%`, ux + 28 + uw / 2, uy + 9);
+    ctx.fillStyle = '#fff';
+    ctx.fillText(ready ? 'Q READY' : `Lantern ${Math.floor(state.lantern)}%`, ux + 28 + uw / 2, uy + 9);
+    ctx.textAlign = 'left';
   }
 
   /** The status toggle: a small button at the top left, under the score.
@@ -1197,6 +1296,104 @@ export function createRenderer(canvas) {
     ctx.roundRect(x, y, w, h, 14);
     ctx.fill();
     ctx.stroke();
+  }
+
+  /** The Back button (top-left): back to the main menu from the keeper
+   * select and from the settings screen. */
+  function drawBackButton() {
+    const bb = backButtonRect();
+    ctx.fillStyle = 'rgba(10, 12, 30, 0.72)';
+    ctx.strokeStyle = PALETTE.panelEdge;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(bb.x, bb.y, bb.w, bb.h, 10);
+    ctx.fill();
+    ctx.stroke();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = PALETTE.text;
+    ctx.font = `bold 15px ${FONT}`;
+    ctx.fillText('← Back · Esc', bb.x + 14, bb.y + 26);
+  }
+
+  /** The main menu: the title, the tagline, Start and Settings, the
+   * controls line and the best score. Enter starts. */
+  function drawMenu(state, best) {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = PALETTE.banner;
+    ctx.font = `bold 84px ${FONT}`;
+    ctx.shadowColor = 'rgba(255, 180, 70, 0.55)';
+    ctx.shadowBlur = 34;
+    ctx.fillText('EMBERLIGHT', FIELD.width / 2, 180);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = PALETTE.text;
+    ctx.font = `26px ${FONT}`;
+    ctx.fillText('Keep the last lantern lit. Survive the night.', FIELD.width / 2, 222);
+    const layout = menuLayout();
+    const buttons = [['start', 'Start · Enter'], ['settings', 'Settings']];
+    for (const [key, label] of buttons) {
+      const b = layout[key];
+      ctx.fillStyle = PALETTE.banner;
+      ctx.strokeStyle = '#fff3cf';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(b.x, b.y, b.w, b.h, 10);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#2a1c08';
+      ctx.font = `bold 22px ${FONT}`;
+      if (key === 'start') {
+        const pulse = 0.8 + 0.2 * Math.sin(state.time * 3);
+        ctx.globalAlpha = pulse;
+      }
+      ctx.fillText(label, b.x + b.w / 2, b.y + 36);
+      ctx.globalAlpha = 1;
+    }
+    ctx.fillStyle = PALETTE.muted;
+    ctx.font = `18px ${FONT}`;
+    ctx.fillText('WASD move · Mouse aim · Auto-fire on · Q fires the ultimate when the lantern is full', FIELD.width / 2, 472);
+    if (best > 0) {
+      ctx.fillStyle = PALETTE.banner;
+      ctx.font = `bold 20px ${FONT}`;
+      ctx.fillText(`Best score ${best}`, FIELD.width / 2, 512);
+    }
+  }
+
+  /** The settings screen: four settings, each a row of obviously clickable
+   * buttons with the current value lit, and Back to the main menu. */
+  function drawSettings(settings) {
+    const layout = settingsLayout();
+    const r = layout.panel;
+    panel(r.x, r.y, r.w, r.h);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = PALETTE.banner;
+    ctx.font = `bold 36px ${FONT}`;
+    ctx.fillText('Settings', FIELD.width / 2, r.y + 52);
+    for (const row of layout.rows) {
+      ctx.textAlign = 'left';
+      ctx.fillStyle = PALETTE.text;
+      ctx.font = `bold 18px ${FONT}`;
+      ctx.fillText(row.label, r.x + 40, row.y + 31);
+      for (const opt of row.options) {
+        const current = settingsValue(settings, row.id) === opt.value;
+        const b = opt.rect;
+        ctx.fillStyle = current ? PALETTE.banner : PALETTE.card;
+        ctx.strokeStyle = current ? '#fff3cf' : PALETTE.cardEdge;
+        ctx.lineWidth = current ? 3 : 2;
+        ctx.beginPath();
+        ctx.roundRect(b.x, b.y, b.w, b.h, 8);
+        ctx.fill();
+        ctx.stroke();
+        ctx.textAlign = 'center';
+        ctx.fillStyle = current ? '#2a1c08' : PALETTE.text;
+        ctx.font = `bold 14px ${FONT}`;
+        ctx.fillText(opt.value[0].toUpperCase() + opt.value.slice(1), b.x + b.w / 2, b.y + 30);
+      }
+    }
+    ctx.textAlign = 'center';
+    ctx.fillStyle = PALETTE.muted;
+    ctx.font = `16px ${FONT}`;
+    ctx.fillText('Changes save automatically', FIELD.width / 2, r.y + r.h - 24);
+    drawBackButton();
   }
 
   function drawTitle(state, best) {
@@ -1291,6 +1488,9 @@ export function createRenderer(canvas) {
       ctx.font = `bold 20px ${FONT}`;
       ctx.fillText(`Best score ${best}`, FIELD.width / 2, 694);
     }
+
+    // Back to the main menu: the button, or Esc / M.
+    drawBackButton();
   }
 
   /**
@@ -2111,14 +2311,27 @@ export function createRenderer(canvas) {
   }
 
   function drawPaused() {
-    panel(FIELD.width / 2 - 260, 250, 520, 200);
+    const layout = pauseLayout();
+    panel(layout.panel.x, layout.panel.y, layout.panel.w, layout.panel.h);
     ctx.textAlign = 'center';
     ctx.fillStyle = PALETTE.text;
     ctx.font = `bold 40px ${FONT}`;
-    ctx.fillText('Paused', FIELD.width / 2, 330);
-    ctx.fillStyle = PALETTE.muted;
-    ctx.font = `19px ${FONT}`;
-    ctx.fillText('Press P or Enter to keep playing', FIELD.width / 2, 372);
+    ctx.fillText('Paused', FIELD.width / 2, 300);
+    // The pause menu: Resume, Settings, Menu — each button labelled with
+    // its key, so the keys and the clicks agree.
+    for (const [key, label] of [['resume', 'Resume · P'], ['settings', 'Settings · S'], ['menu', 'Menu · M']]) {
+      const b = layout[key];
+      ctx.fillStyle = PALETTE.banner;
+      ctx.strokeStyle = '#fff3cf';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(b.x, b.y, b.w, b.h, 10);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#2a1c08';
+      ctx.font = `bold 17px ${FONT}`;
+      ctx.fillText(label, FIELD.width / 2, b.y + 31);
+    }
   }
 
   /** The rows the status panel lists for one tab: name, level pips, text.
@@ -2270,9 +2483,22 @@ export function createRenderer(canvas) {
     ctx.globalAlpha = pulse;
     ctx.fillText(prompt, FIELD.width / 2, 486);
     ctx.globalAlpha = 1;
+    // Back to the title: the button, or M. The end screens share one panel
+    // and one button rect.
+    const mb = menuButtonRect(SCREEN_OVER);
+    ctx.fillStyle = PALETTE.banner;
+    ctx.strokeStyle = '#fff3cf';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(mb.x, mb.y, mb.w, mb.h, 10);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#2a1c08';
+    ctx.font = `bold 17px ${FONT}`;
+    ctx.fillText('Menu · M', FIELD.width / 2, mb.y + 27);
   }
 
-  function draw(state, screen, best, statsTab = 'upgrades') {
+  function draw(state, screen, best, statsTab = 'upgrades', settings = DEFAULT_SETTINGS) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#05060f';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -2282,7 +2508,7 @@ export function createRenderer(canvas) {
     ctx.setTransform(view.scale, 0, 0, view.scale, view.ox + ox * view.scale, view.oy + oy * view.scale);
 
     drawBackground(state);
-    if (screen !== SCREEN_TITLE) {
+    if (screen !== SCREEN_TITLE && screen !== SCREEN_MENU && screen !== SCREEN_SETTINGS) {
       drawLanternGlow(state);
       for (const e of state.enemies) drawEnemy(e, state.time, state.player);
       drawHalo(state);
@@ -2294,8 +2520,8 @@ export function createRenderer(canvas) {
       drawHud(state, best);
       drawBanner(state);
     } else {
-      // The title keeps only the glow and the drifting embers: the wisp would
-      // sit on top of the instructions.
+      // The menu, the select and the settings keep only the glow and the
+      // drifting embers: the wisp would sit on top of the instructions.
       drawLanternGlow(state);
       drawParticles(state);
     }
@@ -2357,7 +2583,9 @@ export function createRenderer(canvas) {
       drawStatsToggle();
     }
 
-    if (screen === SCREEN_TITLE) drawTitle(state, best);
+    if (screen === SCREEN_MENU) drawMenu(state, best);
+    else if (screen === SCREEN_SETTINGS) drawSettings(settings);
+    else if (screen === SCREEN_TITLE) drawTitle(state, best);
     else if (screen === SCREEN_UPGRADE) drawUpgrade(state);
     else if (screen === SCREEN_PAUSED) drawPaused();
     else if (screen === SCREEN_STATS) drawStatsPanel(state, statsTab);

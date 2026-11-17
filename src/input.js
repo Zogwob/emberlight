@@ -1,7 +1,8 @@
 // Keyboard and mouse, read fresh every frame. Movement is WASD or arrows;
 // the mouse aims; the lantern fires on its own in v2 (hold the left button
 // or Space still counts as firing, harmlessly). Enter/Space confirms on
-// menus, P or Escape pauses, I opens the status panel, R re-rolls the card
+// menus, P or Escape pauses, M returns to the main menu from pause, game
+// over or dawn, S opens settings from the pause menu, I opens the status panel, R re-rolls the card
 // offer, 1-4 pick an upgrade card, 5-8 buy a shop item.
 
 export const ACTION_CONFIRM = 1;
@@ -31,6 +32,8 @@ export function createInput(canvas) {
   let ult = false;
   let stats = false;
   let refresh = false;
+  let menu = false;
+  let settings = false;
 
   function onKeyDown(event) {
     if (event.repeat) return;
@@ -42,6 +45,8 @@ export function createInput(canvas) {
     if (event.code === 'KeyQ') ult = true;
     if (event.code === 'KeyI') stats = true;
     if (event.code === 'KeyR') refresh = true;
+    if (event.code === 'KeyM') menu = true;
+    if (event.code === 'KeyS') settings = true;
     if (event.code === 'KeyP' || event.code === 'Escape') actions |= ACTION_PAUSE;
     if (event.code === 'Digit1') upgradePick = 1;
     if (event.code === 'Digit2') upgradePick = 2;
@@ -152,6 +157,18 @@ export function createInput(canvas) {
     takeRefresh() {
       const out = refresh;
       refresh = false;
+      return out;
+    },
+    /** True when M (back to the main menu) was pressed since the last read. */
+    takeMenu() {
+      const out = menu;
+      menu = false;
+      return out;
+    },
+    /** True when S (settings from the pause menu) was pressed since the last read. */
+    takeSettings() {
+      const out = settings;
+      settings = false;
       return out;
     },
     /** True once per mouse press since the last read (for card clicks). */

@@ -1,10 +1,10 @@
 // Boot and the one loop: input is read every frame, the world advances in fixed
 // 1/60 s steps (several in a slow frame, none in a fast one), and the renderer
-// paints what is there. The game moves between seven screens: title, play,
-// the between-wave upgrade choice, paused, the status panel, game over and
-// dawn (victory).
+// paints what is there. The game moves between nine screens: the main menu,
+// the keeper select, play, the between-wave upgrade choice, paused, the
+// status panel, game over, dawn (victory) and settings.
 //
-// ?seed=N fixes the night's pattern. ?shot=title|play|upgrade|over|win|select|panel|highwave|ultimate (with
+// ?seed=N fixes the night's pattern. ?shot=title|play|upgrade|over|win|select|panel|highwave|ultimate|hud|menu|settings (with
 // &seed=N) stages that scene instead of running the loop, paints it twice and
 // sets window.__shotReady for a screenshot.
 
@@ -13,17 +13,25 @@ import { createRandom } from './random.js';
 import { createWorld } from './world.js';
 import { ACTION_CONFIRM, ACTION_PAUSE, createInput } from './input.js';
 import { createAudio } from './audio.js';
+import { loadSettings, saveSettings } from './settings.js';
 import {
+  SCREEN_MENU,
   SCREEN_OVER,
   SCREEN_PAUSED,
   SCREEN_PLAY,
+  SCREEN_SETTINGS,
   SCREEN_STATS,
   SCREEN_TITLE,
   SCREEN_UPGRADE,
   SCREEN_WON,
+  backButtonRect,
   characterLayout,
   createRenderer,
   keeperIconRect,
+  menuButtonRect,
+  menuLayout,
+  pauseLayout,
+  settingsLayout,
   statsPanelLayout,
   statsToggleRect,
   upgradeLayout,
@@ -63,6 +71,16 @@ function saveBest(value) {
 
 function runShot(name) {
   const scene = stageShot(name, world);
+  // The shot page exposes the same live handle as the game, so a staged
+  // scene's state (a high level, wide XP numbers) can be read back.
+  window.__emberlight = {
+    get state() {
+      return world.state;
+    },
+    get screen() {
+      return scene.screen;
+    },
+  };
   let painted = 0;
   function paint() {
     renderer.draw(world.state, scene.screen, scene.best);
@@ -75,13 +93,27 @@ function runShot(name) {
 
 function runGame() {
   const input = createInput(canvas);
-  let screen = SCREEN_TITLE;
+  let screen = SCREEN_MENU;
   let best = readBest();
   let accumulator = 0;
   let last = performance.now();
   let endless = false;
   // The status panel's open tab; kept between openings.
   let statsTab = 'upgrades';
+  // Settings, read from storage once and applied everywhere they gate:
+  // the audio buses, the world's shake switch and particle density.
+  let settings = loadSettings();
+  // Where the settings screen was opened from: 'menu' (the main menu) or
+  // 'paused' (the pause menu). Back returns there, so a pause-menu visit
+  // never drops the player back at the main menu mid-run.
+  let settingsReturn = 'menu';
+  function applySettings() {
+    audio.setMusicVolume(settings.music);
+    audio.setSfxVolume(settings.sfx);
+    world.state.shakeEnabled = settings.shake;
+    world.state.particleScale = settings.effects === 'reduced' ? 0.5 : 1;
+  }
+  applySettings();
 
   // A handle for automated play-testing (and the finalist review): the live
   // world state and the current screen, read-only from outside the game.
@@ -106,6 +138,38 @@ function runGame() {
     /** The between-wave screen rectangles, in field coordinates. */
     upgradeLayout() {
       return upgradeLayout(world.state);
+    },
+    /** The pause menu's button rectangles, in field coordinates. */
+    pauseLayout() {
+      return pauseLayout();
+    },
+    /** The Menu button rectangle for the current screen, in field coordinates. */
+    menuRect() {
+      return menuButtonRect(screen);
+    },
+    /** The main menu's button rectangles, in field coordinates. */
+    menuLayout() {
+      return menuLayout();
+    },
+    /** The settings screen's geometry, in field coordinates. */
+    settingsLayout() {
+      return settingsLayout();
+    },
+    /** The Back button rectangle, in field coordinates. */
+    backRect() {
+      return backButtonRect();
+    },
+    /** The keeper select's card and Begin rectangles, in field coordinates. */
+    characterLayout() {
+      return characterLayout();
+    },
+    /** The live settings, for the settings screen and tests. */
+    settings() {
+      return { ...settings };
+    },
+    /** The live volume scales, for tests. */
+    audioLevels() {
+      return audio.levels();
     },
   };
 
@@ -161,6 +225,54 @@ function runGame() {
       saveBest(best);
     }
     announce(`Game over. Score ${world.state.score}. Best ${best}.`);
+  }
+
+  /** Back to the main menu from pause, game over or dawn: a fresh run, the
+   * best score kept (it lives here, not in the world). From the menu, Start
+   * leads to the keeper select; starting again from it works like the first run. */
+  function goToMenu() {
+    audio.click();
+    world.reset();
+    endless = false;
+    screen = SCREEN_MENU;
+    announce('Main menu. Press Enter to start, or open Settings.');
+  }
+
+  /** Open the settings screen and remember where it was opened from, so
+   * Back returns there: the main menu, or the pause menu mid-run. */
+  function openSettings(from) {
+    audio.unlock();
+    audio.click();
+    settingsReturn = from;
+    screen = SCREEN_SETTINGS;
+    announce('Settings. Changes save automatically.');
+  }
+
+  /** Back from the settings screen: to the pause menu when it was opened
+   * from pause, to the main menu otherwise. */
+  function backFromSettings() {
+    audio.click();
+    if (settingsReturn === 'paused') {
+      screen = SCREEN_PAUSED;
+      announce('Paused.');
+    } else {
+      screen = SCREEN_MENU;
+      announce('Main menu. Press Enter to start, or open Settings.');
+    }
+  }
+
+  /** One setting changed on the settings screen: store it, apply it at
+   * once, and tick. The row's option values read as the settings do. */
+  function setSetting(id, value) {
+    if (id === 'music') settings.music = value;
+    else if (id === 'sfx') settings.sfx = value;
+    else if (id === 'shake') settings.shake = value === 'on';
+    else if (id === 'effects') settings.effects = value;
+    else return;
+    saveSettings(settings);
+    applySettings();
+    audio.click();
+    announce(`Setting: ${id} ${value}.`);
   }
 
   function winGame() {
@@ -231,10 +343,37 @@ function runGame() {
     const shopPick = input.takeShopPick();
     const statsKey = input.takeStats();
     const refreshKey = input.takeRefresh();
-    if (screen === SCREEN_TITLE) {
-      // The title is the keeper select: 1/2/3 picks a keeper, Enter begins.
-      // Clicks never begin here — they pick a card or press Begin instead.
+    const menuKey = input.takeMenu();
+    const settingsKey = input.takeSettings();
+    if (screen === SCREEN_MENU) {
+      // The main menu: Enter starts (to the keeper select). Clicks press
+      // Start or Settings instead.
       if (actions & ACTION_CONFIRM) audio.unlock();
+      if (input.takeConfirmKey()) {
+        audio.confirm();
+        screen = SCREEN_TITLE;
+        announce('Choose a keeper with 1, 2 or 3, then press Enter or click Begin.');
+      }
+      return;
+    }
+    if (screen === SCREEN_SETTINGS) {
+      // Back: Esc / M, or the Back button (a click) — to wherever the
+      // settings were opened from (the main menu, or the pause menu).
+      if (actions & ACTION_CONFIRM) audio.unlock();
+      if (menuKey || (actions & ACTION_PAUSE)) backFromSettings();
+      return;
+    }
+    if (screen === SCREEN_TITLE) {
+      // The keeper select: 1/2/3 picks a keeper, Enter begins. Esc / M (or
+      // the Back button) returns to the main menu. Clicks never begin here
+      // — they pick a card or press Begin instead.
+      if (actions & ACTION_CONFIRM) audio.unlock();
+      if (menuKey || (actions & ACTION_PAUSE)) {
+        audio.click();
+        screen = SCREEN_MENU;
+        announce('Main menu. Press Enter to start, or open Settings.');
+        return;
+      }
       if (pick >= 1 && pick <= 3) selectCharacter(pick - 1);
       if (input.takeConfirmKey()) startGame();
       return;
@@ -264,9 +403,25 @@ function runGame() {
       announce('Status panel. Paused.');
       return;
     }
+    // M returns to the main menu from pause, game over or dawn.
+    if (menuKey && (screen === SCREEN_PAUSED || screen === SCREEN_OVER || screen === SCREEN_WON)) {
+      goToMenu();
+      return;
+    }
+    // S opens the settings from the pause menu (and remembers it came
+    // from there, so Back returns to the pause menu, not the main menu).
+    if (settingsKey && screen === SCREEN_PAUSED) {
+      openSettings('paused');
+      return;
+    }
     if (actions & ACTION_CONFIRM) audio.unlock();
-    if (actions & ACTION_CONFIRM && screen === SCREEN_OVER) startGame();
-    else if (actions & ACTION_CONFIRM && screen === SCREEN_WON) {
+    // Restart / continue / resume are keyboard-only here (Enter or Space):
+    // a mouse click on pause belongs to the pause menu's three buttons, and
+    // a click on game over or dawn belongs to the Menu button — a click that
+    // restarts the run must not swallow one of those.
+    const confirmKey = input.takeConfirmKey();
+    if (confirmKey && screen === SCREEN_OVER) startGame();
+    else if (confirmKey && screen === SCREEN_WON) {
       audio.confirm();
       endless = true;
       world.setEndless(true);
@@ -279,17 +434,23 @@ function runGame() {
       audio.click();
       screen = SCREEN_PAUSED;
       announce('Paused.');
-    } else if (actions & (ACTION_PAUSE | ACTION_CONFIRM) && screen === SCREEN_PAUSED) {
+    } else if ((actions & ACTION_PAUSE || confirmKey) && screen === SCREEN_PAUSED) {
       audio.click();
       screen = SCREEN_PLAY;
       announce('Playing.');
     }
   }
 
-  /** Clicks on the title screen pick a keeper or press Begin. */
+  /** Clicks on the keeper select pick a keeper, press Begin — or go back. */
   function handleTitleClick(aim) {
     const layout = characterLayout();
     const inside = (r) => aim.x >= r.x && aim.x <= r.x + r.w && aim.y >= r.y && aim.y <= r.y + r.h;
+    if (inside(backButtonRect())) {
+      audio.click();
+      screen = SCREEN_MENU;
+      announce('Main menu. Press Enter to start, or open Settings.');
+      return;
+    }
     for (let i = 0; i < layout.cards.length; i += 1) {
       if (inside(layout.cards[i])) {
         selectCharacter(i);
@@ -308,6 +469,34 @@ function runGame() {
     if (!input.takeClick()) return;
     const aim = renderer.fieldFromClient(input.aim().x, input.aim().y);
     const inside = (r) => aim.x >= r.x && aim.x <= r.x + r.w && aim.y >= r.y && aim.y <= r.y + r.h;
+    if (screen === SCREEN_MENU) {
+      const layout = menuLayout();
+      if (inside(layout.start)) {
+        audio.unlock();
+        audio.confirm();
+        screen = SCREEN_TITLE;
+        announce('Choose a keeper with 1, 2 or 3, then press Enter or click Begin.');
+      } else if (inside(layout.settings)) {
+        openSettings('menu');
+      }
+      return;
+    }
+    if (screen === SCREEN_SETTINGS) {
+      const layout = settingsLayout();
+      if (inside(layout.back)) {
+        backFromSettings();
+        return;
+      }
+      for (const row of layout.rows) {
+        for (const opt of row.options) {
+          if (inside(opt.rect)) {
+            setSetting(row.id, opt.value);
+            return;
+          }
+        }
+      }
+      return;
+    }
     if (screen === SCREEN_TITLE) {
       handleTitleClick(aim);
       return;
@@ -343,6 +532,25 @@ function runGame() {
       }
       return;
     }
+    if (screen === SCREEN_PAUSED) {
+      // The pause menu: Resume, Settings, Menu. A click belongs to one of
+      // the three buttons — it never resumes or restarts on its own.
+      const layout = pauseLayout();
+      if (inside(layout.resume)) {
+        audio.click();
+        screen = SCREEN_PLAY;
+        announce('Playing.');
+      } else if (inside(layout.settings)) {
+        openSettings('paused');
+      } else if (inside(layout.menu)) {
+        goToMenu();
+      }
+      return;
+    }
+    if (screen === SCREEN_OVER || screen === SCREEN_WON) {
+      if (inside(menuButtonRect(screen))) goToMenu();
+      return;
+    }
     if (screen !== SCREEN_UPGRADE) return;
     const layout = upgradeLayout(world.state);
     for (let i = 0; i < layout.cards.length; i += 1) {
@@ -365,7 +573,7 @@ function runGame() {
   }
 
   function step() {
-    if (screen === SCREEN_TITLE) {
+    if (screen === SCREEN_MENU || screen === SCREEN_TITLE) {
       world.stepAmbient(STEP);
       return;
     }
@@ -397,15 +605,15 @@ function runGame() {
     handleClick();
     // The boss layer: a heartbeat while a boss lives, silent once it dies.
     audio.setBoss(world.state.enemies.some((e) => e.boss));
-    if (screen === SCREEN_TITLE || screen === SCREEN_PLAY) {
-      while (accumulator >= STEP && (screen === SCREEN_TITLE || screen === SCREEN_PLAY)) {
+    if (screen === SCREEN_MENU || screen === SCREEN_TITLE || screen === SCREEN_PLAY) {
+      while (accumulator >= STEP && (screen === SCREEN_MENU || screen === SCREEN_TITLE || screen === SCREEN_PLAY)) {
         step();
         accumulator -= STEP;
       }
     } else {
       accumulator = 0;
     }
-    renderer.draw(world.state, screen, best, statsTab);
+    renderer.draw(world.state, screen, best, statsTab, settings);
   }
 
   // Leaving the tab pauses a running game rather than letting shadows close in unseen.
@@ -416,7 +624,7 @@ function runGame() {
     }
   });
 
-  announce('Emberlight. Choose a keeper with 1, 2 or 3, then press Enter or click Begin.');
+  announce('Emberlight. Press Enter to start, or open Settings.');
   requestAnimationFrame(frame);
 }
 

@@ -4,6 +4,11 @@
 // A-minor drone pad with slow sparse melody notes, far quieter than the SFX.
 // A boss wave adds a tenser layer — a low heartbeat drum — that drops away
 // when the boss dies.
+//
+// Music (pad, melody, heartbeat) and SFX (every tone and noise, UI clicks
+// included) ride separate buses, so the settings screen can scale or mute
+// each on its own. Both buses feed the master, which stays at 0.35.
+import { volumeScale } from './settings.js';
 
 function makeContext() {
   const Ctor = window.AudioContext || window.webkitAudioContext;
@@ -14,6 +19,12 @@ function makeContext() {
 export function createAudio() {
   let ctx = null;
   let master = null;
+  let musicBus = null;
+  let sfxBus = null;
+  // The live volume scales (1 = Med, the game as tuned); setters store
+  // them first, so a setting made before the context exists still lands.
+  let musicScale = 1;
+  let sfxScale = 1;
   let drone = null;
   // The ambient loop's schedulers: a slow melody and (on boss waves) a
   // heartbeat. Both are quiet on purpose — the music must never fight the SFX.
@@ -33,6 +44,12 @@ export function createAudio() {
     master = ctx.createGain();
     master.gain.value = 0.35;
     master.connect(ctx.destination);
+    musicBus = ctx.createGain();
+    musicBus.gain.value = musicScale;
+    musicBus.connect(master);
+    sfxBus = ctx.createGain();
+    sfxBus.gain.value = sfxScale;
+    sfxBus.connect(master);
     return ctx;
   }
 
@@ -56,7 +73,7 @@ export function createAudio() {
     gain.gain.linearRampToValueAtTime(vol, t0 + 0.4);
     gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 2.8);
     osc.connect(gain);
-    gain.connect(master);
+    gain.connect(musicBus);
     osc.start(t0);
     osc.stop(t0 + 3);
   }
@@ -95,7 +112,7 @@ export function createAudio() {
     lfoGain.gain.value = 0.008;
     lfo.connect(lfoGain);
     lfoGain.connect(padGain.gain);
-    padGain.connect(master);
+    padGain.connect(musicBus);
     const oscs = [];
     for (const freq of [55, 65.41, 82.41]) {
       const osc = ctx.createOscillator();
@@ -131,7 +148,7 @@ export function createAudio() {
       gain.gain.setValueAtTime(vol, t0);
       gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.22);
       osc.connect(gain);
-      gain.connect(master);
+      gain.connect(musicBus);
       osc.start(t0);
       osc.stop(t0 + 0.25);
       bossBeat += 1;
@@ -173,7 +190,7 @@ export function createAudio() {
       gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     }
     osc.connect(gain);
-    gain.connect(master);
+    gain.connect(sfxBus);
     osc.start(t0);
     osc.stop(t0 + dur + 0.02);
   }
@@ -202,7 +219,7 @@ export function createAudio() {
     gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     src.connect(filter);
     filter.connect(gain);
-    gain.connect(master);
+    gain.connect(sfxBus);
     src.start(t0);
   }
 
@@ -210,6 +227,20 @@ export function createAudio() {
     unlock,
     setKeeper,
     setBoss,
+    /** Scale the music (BGM pad, melody, heartbeat) — Off silences it. */
+    setMusicVolume(level) {
+      musicScale = volumeScale(level);
+      if (musicBus) musicBus.gain.value = musicScale;
+    },
+    /** Scale every SFX, UI clicks included — Off silences them. */
+    setSfxVolume(level) {
+      sfxScale = volumeScale(level);
+      if (sfxBus) sfxBus.gain.value = sfxScale;
+    },
+    /** The live volume scales, for the settings screen and tests. */
+    levels() {
+      return { music: musicScale, sfx: sfxScale };
+    },
     // One soft UI click for every menu press: a short triangle tick with a
     // breath of high noise — clean and quiet, never a Pacman beep.
     click() {

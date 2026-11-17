@@ -1,16 +1,16 @@
 // The screenshot scenes behind ?shot=title|play|upgrade|over|win. Each one
 // plays the real rules forward from a fresh world for a fixed number of steps,
 // steered by an autopilot, so the frame is what a short game really looks like
-// and the same seed always gives the same frame.
+// and the same seed always gives the same frame. The menu and settings scenes
+// stage the ambient field behind the new first screens instead.
 //
 // The play pilot moves toward the nearest shadow while keeping clear of the
 // others and fires at the closest one; the end pilot is careless, so it is
 // caught out once the shadows speed up, as a hurried player is. The win scene
 // stages a strong keeper at wave 10 and lets the pilot clear it, which is how
 // the dawn screen is really reached.
-
 import { ENEMY_KINDS, FIELD, STEP, WIN_WAVE } from './config.js';
-import { SCREEN_OVER, SCREEN_PLAY, SCREEN_STATS, SCREEN_TITLE, SCREEN_UPGRADE, SCREEN_WON } from './render.js';
+import { SCREEN_MENU, SCREEN_OVER, SCREEN_PLAY, SCREEN_SETTINGS, SCREEN_STATS, SCREEN_TITLE, SCREEN_UPGRADE, SCREEN_WON } from './render.js';
 
 /** Stage one shadow by hand (mirroring spawnEnemy): the staged scenes need a
  * dense field at once, not the slow trickle of the spawn timer. `hpFrac`
@@ -129,11 +129,21 @@ function playForward(world, seconds, cautious, stop) {
 
 /**
  * Set `world` to the named scene (title, play, upgrade, over, win, select,
- * panel, highwave or ultimate; any other name is title) and return the screen
- * to draw over it and the best score.
+ * panel, highwave, ultimate, hud, menu or settings; any other name is title)
+ * and return the screen to draw over it and the best score.
  */
 export function stageShot(name, world) {
   world.reset();
+  // menu: the main menu — the title, the tagline, Start and Settings.
+  if (name === 'menu') {
+    for (let i = 0; i < TITLE_SECONDS / STEP; i += 1) world.stepAmbient(STEP);
+    return { screen: SCREEN_MENU, best: 1240 };
+  }
+  // settings: the settings screen over the ambient field.
+  if (name === 'settings') {
+    for (let i = 0; i < TITLE_SECONDS / STEP; i += 1) world.stepAmbient(STEP);
+    return { screen: SCREEN_SETTINGS, best: 1240 };
+  }
   if (name === 'title' || !name) {
     for (let i = 0; i < TITLE_SECONDS / STEP; i += 1) world.stepAmbient(STEP);
     return { screen: SCREEN_TITLE, best: 1240 };
@@ -204,6 +214,24 @@ export function stageShot(name, world) {
       world.step(STEP, { move: { x: 0, y: 0 }, aim: { x: 640, y: 200 }, firing: true });
     }
     // The frame is the ultimate, not the wave banner.
+    s.banner = '';
+    s.bannerTime = 0;
+    return { screen: SCREEN_PLAY, best: 1240 };
+  }
+  // hud: the bottom-centre bar at a high level — the widest XP count the
+  // game can show ("1425/1425", level 15) over the level gauge and the
+  // widest lantern count that can render ("Lantern 99%" — at 100 the text
+  // flips to "Q READY") over its gauge, so both numbers' place inside
+  // their sections can be checked at a glance. The keeper is loaded, so
+  // the item slots and the ultimate have something to show too.
+  if (name === 'hud') {
+    const s = loadKeeper(world, 'ember');
+    world.beginWave(3);
+    playForward(world, 2, true, null);
+    s.player.level = 15;
+    s.player.xp = 1425;
+    s.player.xpNeed = 1425;
+    s.lantern = 99;
     s.banner = '';
     s.bannerTime = 0;
     return { screen: SCREEN_PLAY, best: 1240 };
