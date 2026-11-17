@@ -1329,7 +1329,7 @@ export function createRenderer(canvas) {
     ctx.font = `26px ${FONT}`;
     ctx.fillText('Keep the last lantern lit. Survive the night.', FIELD.width / 2, 222);
     const layout = menuLayout();
-    const buttons = [['start', 'Start · Enter'], ['settings', 'Settings']];
+    const buttons = [['start', 'Start'], ['settings', 'Settings']];
     for (const [key, label] of buttons) {
       const b = layout[key];
       ctx.fillStyle = PALETTE.banner;
@@ -1480,7 +1480,7 @@ export function createRenderer(canvas) {
     ctx.font = `bold 22px ${FONT}`;
     const pulse = 0.8 + 0.2 * Math.sin(state.time * 3);
     ctx.globalAlpha = pulse;
-    ctx.fillText('Begin the Night · Enter', btn.x + btn.w / 2, btn.y + 32);
+    ctx.fillText('Begin the Night', btn.x + btn.w / 2, btn.y + 32);
     ctx.globalAlpha = 1;
 
     if (best > 0) {
@@ -2304,7 +2304,7 @@ export function createRenderer(canvas) {
     ctx.font = `bold 20px ${FONT}`;
     // The icon and the label are one centred group, so the button reads as
     // one control; the "pick a card" state has no icon (it is not a button).
-    const nextLabel = ready ? `Begin Wave ${state.wave + 1}  ·  Enter` : 'Pick a card to continue';
+    const nextLabel = ready ? `Begin Wave ${state.wave + 1}` : 'Pick a card to continue';
     const nlW = ctx.measureText(nextLabel).width;
     if (ready) drawIcon('chevrons', btn.x + btn.w / 2 - (nlW + 28) / 2 + 11, btn.y + 24);
     ctx.fillText(nextLabel, btn.x + btn.w / 2 + (ready ? 14 : 0), btn.y + 31);
